@@ -1,0 +1,1 @@
+sudo kubectl delete namespace spark
