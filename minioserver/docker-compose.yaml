@@ -36,10 +36,12 @@ services:
       mc mb minio/raw --ignore-existing  &&
       mc mb minio/curated --ignore-existing  &&
       mc mb minio/artifacts --ignore-existing  &&
+      mc cp --recursive /artifacts/python minio/artifacts &&
       mc cp --recursive /data/gh_archive minio/raw
       "
     volumes:
       - ./data:/data
+      - ./artifacts:/artifacts
 
 volumes:
   minio_data:
