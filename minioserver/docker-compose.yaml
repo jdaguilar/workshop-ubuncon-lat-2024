@@ -44,5 +44,16 @@ services:
       - ./data:/data
       - ./artifacts:/artifacts
 
+  dremio:
+    platform: linux/x86_64
+    image: dremio/dremio-oss:latest
+    ports:
+      - 9047:9047
+      - 31010:31010
+      - 32010:32010
+      - 45678:45678
+    container_name: dremio
+    hostname: dremio
+
 volumes:
   minio_data:
