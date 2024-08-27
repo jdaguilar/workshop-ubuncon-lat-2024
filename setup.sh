@@ -116,6 +116,9 @@ read -p "Set AWS S3 Endpoint (default: http://$IPADDR:9000): " AWS_S3_ENDPOINT
 
 spark-client.service-account-registry add-config \
     --username spark --namespace spark \
+    --conf spark.eventLog.enabled=true \
+    --conf spark.eventLog.dir=s3a://logs/spark-events/ \
+    --conf spark.history.fs.logDirectory=s3a://logs/spark-events/ \
     --conf spark.hadoop.fs.s3a.aws.credentials.provider=org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider \
     --conf spark.hadoop.fs.s3a.connection.ssl.enabled=false \
     --conf spark.hadoop.fs.s3a.path.style.access=true \
