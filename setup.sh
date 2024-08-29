@@ -150,23 +150,28 @@ deploy_minio_docker() {
 }
 
 configure_aws_cli() {
-    aws configure set aws_access_key_id "$AWS_ACCESS_KEY"
-    aws configure set aws_secret_access_key "$AWS_SECRET_KEY"
-    aws configure set region "us-west-2"
-    aws configure set endpoint_url "http://$AWS_S3_ENDPOINT"
+    local profile_name="minio-local"
+    aws configure set profile.$profile_name.aws_access_key_id "$AWS_ACCESS_KEY"
+    aws configure set profile.$profile_name.aws_secret_access_key "$AWS_SECRET_KEY"
+    aws configure set profile.$profile_name.region "us-west-2"
+    aws configure set profile.$profile_name.endpoint_url "http://$AWS_S3_ENDPOINT"
+
+    print_info "AWS CLI configuration for MinIO has been set under the profile '$profile_name'"
+    print_info "To use this profile, add --profile $profile_name to your AWS CLI commands"
 }
 
 create_s3_buckets() {
+    local profile_name="minio-local"
     local buckets=("raw" "curated" "artifacts" "logs")
     for bucket in "${buckets[@]}"; do
-        if aws s3 ls "s3://$bucket" --endpoint-url "http://$AWS_S3_ENDPOINT" 2>&1 | grep -q 'NoSuchBucket'; then
-            aws s3 mb "s3://$bucket" --endpoint-url "http://$AWS_S3_ENDPOINT"
+        if aws s3 ls "s3://$bucket" --profile $profile_name --endpoint-url "http://$AWS_S3_ENDPOINT" 2>&1 | grep -q 'NoSuchBucket'; then
+            aws s3 mb "s3://$bucket" --profile $profile_name --endpoint-url "http://$AWS_S3_ENDPOINT"
         else
             echo "Bucket s3://$bucket already exists. Skipping creation."
         fi
     done
 
-    aws s3 cp minioserver/data s3://raw --recursive --endpoint-url "http://$AWS_S3_ENDPOINT"
+    # aws s3 cp minioserver/data s3://raw --recursive --profile $profile_name --endpoint-url "http://$AWS_S3_ENDPOINT"
 }
 
 configure_spark_settings() {
