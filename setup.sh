@@ -114,8 +114,10 @@ deploy_minio_microk8s() {
     sudo cp /var/snap/microk8s/common/addons/core/addons/minio/enable tmp_minio_fix/backups/enable.backup
     sudo cp tmp_minio_fix/enable /var/snap/microk8s/common/addons/core/addons/minio/enable
     sudo chmod 755 /var/snap/microk8s/common/addons/core/addons/minio/enable
+    sudo chmod 755 tmp_minio_fix/backups/enable.backup
 
     sudo microk8s enable minio
+    sudo microk8s status --wait-ready
 
     export AWS_ACCESS_KEY=$(kubectl get secret -n minio-operator microk8s-user-1 -o jsonpath='{.data.CONSOLE_ACCESS_KEY}' | base64 -d)
     export AWS_SECRET_KEY=$(kubectl get secret -n minio-operator microk8s-user-1 -o jsonpath='{.data.CONSOLE_SECRET_KEY}' | base64 -d)
@@ -164,12 +166,15 @@ create_s3_buckets() {
     local profile_name="minio-local"
     local buckets=("raw" "curated" "artifacts" "logs")
     for bucket in "${buckets[@]}"; do
-        if aws s3 ls "s3://$bucket" --profile $profile_name --endpoint-url "http://$AWS_S3_ENDPOINT" 2>&1 | grep -q 'NoSuchBucket'; then
-            aws s3 mb "s3://$bucket" --profile $profile_name --endpoint-url "http://$AWS_S3_ENDPOINT"
+        if aws s3 ls "s3://$bucket" --profile $profile_name 2>&1 | grep -q 'NoSuchBucket'; then
+            aws s3 mb "s3://$bucket" --profile $profile_name
         else
             echo "Bucket s3://$bucket already exists. Skipping creation."
         fi
     done
+
+    # Special case for logs
+    aws s3api put-object --bucket=logs --key=spark-events/ --profile=$profile_name
 
     # aws s3 cp minioserver/data s3://raw --recursive --profile $profile_name --endpoint-url "http://$AWS_S3_ENDPOINT"
 }
