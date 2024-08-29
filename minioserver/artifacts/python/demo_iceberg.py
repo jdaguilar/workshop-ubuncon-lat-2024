@@ -4,6 +4,15 @@ from pyspark.sql import SparkSession
 
 JAR_PACKAGES = ("iceberg-spark-runtime-3.5_2.12:1.6.0",)
 
+CREATE_TABLE_QUERY = """
+   CREATE TABLE IF NOT EXISTS iceberg_catalog.taxis (
+         vendor_id long,
+        trip_id long,
+        trip_distance float,
+        fare_amount double,
+        store_and_fwd_flag string
+   ) USING iceberg;
+"""
 
 conf = (
     pyspark.SparkConf()
@@ -21,15 +30,7 @@ conf = (
 spark = SparkSession.builder.config(conf=conf).getOrCreate()
 print("Spark Running")
 
-spark.sql("""
-   CREATE TABLE IF NOT EXISTS iceberg_catalog.taxis (
-         vendor_id long,
-        trip_id long,
-        trip_distance float,
-        fare_amount double,
-        store_and_fwd_flag string
-   ) USING iceberg;
-""").show()
+spark.sql(CREATE_TABLE_QUERY).show()
 
 schema = spark.table("iceberg_catalog.taxis").schema
 data = [

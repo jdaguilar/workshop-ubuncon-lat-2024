@@ -9,6 +9,35 @@ import pyspark.sql.types as T
 
 JAR_PACKAGES = ("iceberg-spark-runtime-3.5_2.12:1.6.0",)
 
+CREATE_TABLE_QUERY = """
+CREATE TABLE IF NOT EXISTS iceberg_catalog.gh_archive (
+    event_id STRING,
+    event_type STRING,
+    created_at TIMESTAMP,
+    repository_id STRING,
+    repository_name STRING,
+    repository_url STRING,
+    user_id STRING,
+    user_name STRING,
+    user_url STRING,
+    user_avatar_url STRING,
+    org_id STRING,
+    org_name STRING,
+    org_url STRING,
+    org_avatar_url STRING,
+    push_id STRING,
+    number_of_commits LONG,
+    language STRING,
+    year INT,
+    month INT,
+    day INT,
+    hour INT,
+    minute INT,
+    second INT
+) USING iceberg
+TBLPROPERTIES ('write.spark.accept-any-schema'='true')
+PARTITIONED BY (year, month, day, hour);
+"""
 
 conf = (
     pyspark.SparkConf()
@@ -86,34 +115,7 @@ if __name__ == "__main__":
         F.unix_timestamp("created_at", "yyyy-MM-dd'T'HH:mm:ss'Z'"),
     )
 
-    spark.sql("""
-    CREATE TABLE IF NOT EXISTS iceberg_catalog.gh_archive (
-        event_id STRING,
-        event_type STRING,
-        created_at TIMESTAMP,
-        repository_id STRING,
-        repository_name STRING,
-        repository_url STRING,
-        user_id STRING,
-        user_name STRING,
-        user_url STRING,
-        user_avatar_url STRING,
-        org_id STRING,
-        org_name STRING,
-        org_url STRING,
-        org_avatar_url STRING,
-        push_id STRING,
-        number_of_commits LONG,
-        language STRING,
-        year INT,
-        month INT,
-        day INT,
-        hour INT,
-        minute INT,
-        second INT
-    ) USING iceberg
-    TBLPROPERTIES ('write.spark.accept-any-schema'='true')
-    PARTITIONED BY (year, month, day, hour);
-    """).show()
+    spark.sql(CREATE_TABLE_QUERY).show()
 
-    main_df.writeTo("iceberg_catalog.gh_archive").option("mergeSchema","true").append()
+    # main_df.writeTo("iceberg_catalog.gh_archive").option("mergeSchema","true").append()
+    main_df.writeTo("iceberg_catalog.gh_archive").option("mergeSchema","true").overwritePartitions()
