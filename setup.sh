@@ -104,15 +104,60 @@ sudo kubectl get rolebindings -n spark
 
 info "Add Extra Settings to Service Account"
 
-read -p "Set AWS Access Key (default: minio_user): " AWS_ACCESS_KEY
-[[ -z "$AWS_ACCESS_KEY" ]] && AWS_ACCESS_KEY="minio_user"
+info "MinIO Deployment"
+read -p "Do you want to deploy MinIO through microk8s or docker? (microk8s/docker): " MINIO_DEPLOYMENT
 
-read -p "Set AWS Secret Key (default: minio_password): " AWS_SECRET_KEY
-[[ -z "$AWS_SECRET_KEY" ]] && AWS_SECRET_KEY="minio_password"
+if [[ "$MINIO_DEPLOYMENT" == "microk8s" ]]; then
+    info "Enabling MinIO through microk8s"
 
-read -p "Set AWS S3 Endpoint (default: http://$IPADDR:9000): " AWS_S3_ENDPOINT
-[[ -z "$AWS_S3_ENDPOINT" ]] && AWS_S3_ENDPOINT="http://$IPADDR:9000"
+    # Create a backup of the original file
+    sudo cp /var/snap/microk8s/common/addons/core/addons/minio/enable tmp_minio_fix/backups/enable.backup
 
+    # Copy the new file to replace the original
+    sudo cp tmp_minio_fix/enable /var/snap/microk8s/common/addons/core/addons/minio/enable
+
+    # Ensure the new file has the correct permissions
+    sudo chmod 755 /var/snap/microk8s/common/addons/core/addons/minio/enable
+
+    sudo microk8s enable minio
+
+    export AWS_ACCESS_KEY=$(kubectl get secret -n minio-operator microk8s-user-1 -o jsonpath='{.data.CONSOLE_ACCESS_KEY}' | base64 -d)
+    export AWS_SECRET_KEY=$(kubectl get secret -n minio-operator microk8s-user-1 -o jsonpath='{.data.CONSOLE_SECRET_KEY}' | base64 -d)
+    export AWS_S3_ENDPOINT=$(kubectl get service minio -n minio-operator -o jsonpath='{.spec.clusterIP}')
+
+    aws configure set aws_access_key_id $AWS_ACCESS_KEY
+    aws configure set aws_secret_access_key $AWS_SECRET_KEY
+    aws configure set region "us-west-2"
+    aws configure set endpoint_url "http://$AWS_S3_ENDPOINT"
+
+    MINIO_UI_IP=$(kubectl get service microk8s-console -n minio-operator -o jsonpath='{.spec.clusterIP}')
+    MINIO_UI_PORT=$(kubectl get service microk8s-console -n minio-operator -o jsonpath='{.spec.ports[0].port}')
+    export MINIO_UI_URL=$MINIO_UI_IP:$MINIO_UI_PORT
+    echo "MinIO UI URL: $MINIO_UI_URL"
+
+    # create buckets
+    aws s3 mb s3://raw --endpoint-url http://$AWS_S3_ENDPOINT
+    aws s3 mb s3://curated --endpoint-url http://$AWS_S3_ENDPOINT
+    aws s3 mb s3://artifacts --endpoint-url http://$AWS_S3_ENDPOINT
+    aws s3 mb s3://logs --endpoint-url http://$AWS_S3_ENDPOINT
+
+    aws s3 cp minioserver/data s3://raw --recursive --endpoint-url http://$AWS_S3_ENDPOINT
+
+elif [[ "$MINIO_DEPLOYMENT" == "docker" ]]; then
+    info "Skipping microk8s MinIO deployment"
+
+    read -p "Set AWS Access Key (default: minio_user): " AWS_ACCESS_KEY
+    [[ -z "$AWS_ACCESS_KEY" ]] && AWS_ACCESS_KEY="minio_user"
+
+    read -p "Set AWS Secret Key (default: minio_password): " AWS_SECRET_KEY
+    [[ -z "$AWS_SECRET_KEY" ]] && AWS_SECRET_KEY="minio_password"
+
+    read -p "Set AWS S3 Endpoint (default: http://$IPADDR:9000): " AWS_S3_ENDPOINT
+    [[ -z "$AWS_S3_ENDPOINT" ]] && AWS_S3_ENDPOINT="http://$IPADDR:9000"
+
+else
+    warn "Invalid choice. Defaulting to docker deployment."
+fi
 
 spark-client.service-account-registry add-config \
     --username spark --namespace spark \
@@ -128,4 +173,4 @@ spark-client.service-account-registry add-config \
     --conf spark.kubernetes.namespace=spark
 
 spark-client.service-account-registry get-config \
-  --username spark --namespace spark
+    --username spark --namespace spark
