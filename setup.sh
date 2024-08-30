@@ -136,7 +136,7 @@ main() {
     configure_metallb
     install_additional_tools
     configure_spark
-    deploy_minio
+    deploy_minio_microk8s
 }
 
 main "$@"
