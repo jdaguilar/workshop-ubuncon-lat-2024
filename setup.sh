@@ -2,6 +2,9 @@
 
 set -euo pipefail
 
+# Global variable
+export MINIO_PROFILE_NAME="minio-local"
+
 # Function definitions
 print_info() { echo -e "\e[32m* $1\e[0m"; }
 print_warn() { echo -e "\e[33m* WARNING: $1\e[0m"; }
@@ -90,24 +93,6 @@ configure_spark() {
     kubectl get rolebindings -n spark
 }
 
-deploy_minio() {
-    local minio_deployment
-    read -rp "Choose MinIO deployment option (1 for microk8s, 2 for docker): " minio_deployment
-
-    case "$minio_deployment" in
-    1)
-        deploy_minio_microk8s
-        ;;
-    2)
-        deploy_minio_docker
-        ;;
-    *)
-        print_warn "Invalid choice. Defaulting to docker deployment."
-        deploy_minio_docker
-        ;;
-    esac
-}
-
 deploy_minio_microk8s() {
     print_info "Enabling MinIO through microk8s"
 
@@ -117,84 +102,32 @@ deploy_minio_microk8s() {
     sudo chmod 755 tmp_minio_fix/backups/enable.backup
 
     sudo microk8s enable minio
-    sudo microk8s status --wait-ready
 
     export AWS_ACCESS_KEY=$(kubectl get secret -n minio-operator microk8s-user-1 -o jsonpath='{.data.CONSOLE_ACCESS_KEY}' | base64 -d)
     export AWS_SECRET_KEY=$(kubectl get secret -n minio-operator microk8s-user-1 -o jsonpath='{.data.CONSOLE_SECRET_KEY}' | base64 -d)
+
+    # Wait for the MinIO service to be ready
+    while ! kubectl get service minio -n minio-operator &>/dev/null; do
+        print_info "Waiting for MinIO service to be ready..."
+        sleep 10
+    done
+
     export AWS_S3_ENDPOINT=$(kubectl get service minio -n minio-operator -o jsonpath='{.spec.clusterIP}')
 
-    configure_aws_cli
+    # Configure AWS CLI profile for MinIO
+    aws configure set aws_access_key_id "$AWS_ACCESS_KEY" --profile "$MINIO_PROFILE_NAME"
+    aws configure set aws_secret_access_key "$AWS_SECRET_KEY" --profile "$MINIO_PROFILE_NAME"
+    aws configure set region "us-west-2" --profile "$MINIO_PROFILE_NAME"
+    aws configure set endpoint_url "http://$AWS_S3_ENDPOINT" --profile "$MINIO_PROFILE_NAME"
+
+    print_info "AWS CLI configuration for MinIO has been set under the profile '$MINIO_PROFILE_NAME'"
+    print_info "To use this profile, add --profile $MINIO_PROFILE_NAME to your AWS CLI commands"
 
     local minio_ui_ip minio_ui_port minio_ui_url
     minio_ui_ip=$(kubectl get service microk8s-console -n minio-operator -o jsonpath='{.spec.clusterIP}')
     minio_ui_port=$(kubectl get service microk8s-console -n minio-operator -o jsonpath='{.spec.ports[0].port}')
     minio_ui_url=$minio_ui_ip:$minio_ui_port
     echo "MinIO UI URL: $minio_ui_url"
-
-    create_s3_buckets
-}
-
-deploy_minio_docker() {
-    print_info "Skipping microk8s MinIO deployment"
-
-    read -rp "Set AWS Access Key (default: minio_user): " AWS_ACCESS_KEY
-    AWS_ACCESS_KEY=${AWS_ACCESS_KEY:-minio_user}
-
-    read -rp "Set AWS Secret Key (default: minio_password): " AWS_SECRET_KEY
-    AWS_SECRET_KEY=${AWS_SECRET_KEY:-minio_password}
-
-    local ipaddr
-    ipaddr=$(ip -4 -j route get 2.2.2.2 | jq -r '.[] | .prefsrc')
-    read -rp "Set AWS S3 Endpoint (default: http://$ipaddr:9000): " AWS_S3_ENDPOINT
-    AWS_S3_ENDPOINT=${AWS_S3_ENDPOINT:-"http://$ipaddr:9000"}
-
-    export AWS_ACCESS_KEY AWS_SECRET_KEY AWS_S3_ENDPOINT
-}
-
-configure_aws_cli() {
-    local profile_name="minio-local"
-    aws configure set profile.$profile_name.aws_access_key_id "$AWS_ACCESS_KEY"
-    aws configure set profile.$profile_name.aws_secret_access_key "$AWS_SECRET_KEY"
-    aws configure set profile.$profile_name.region "us-west-2"
-    aws configure set profile.$profile_name.endpoint_url "http://$AWS_S3_ENDPOINT"
-
-    print_info "AWS CLI configuration for MinIO has been set under the profile '$profile_name'"
-    print_info "To use this profile, add --profile $profile_name to your AWS CLI commands"
-}
-
-create_s3_buckets() {
-    local profile_name="minio-local"
-    local buckets=("raw" "curated" "artifacts" "logs")
-    for bucket in "${buckets[@]}"; do
-        if aws s3 ls "s3://$bucket" --profile $profile_name 2>&1 | grep -q 'NoSuchBucket'; then
-            aws s3 mb "s3://$bucket" --profile $profile_name
-        else
-            echo "Bucket s3://$bucket already exists. Skipping creation."
-        fi
-    done
-
-    # Special case for logs
-    aws s3api put-object --bucket=logs --key=spark-events/ --profile=$profile_name
-
-    # aws s3 cp minioserver/data s3://raw --recursive --profile $profile_name --endpoint-url "http://$AWS_S3_ENDPOINT"
-}
-
-configure_spark_settings() {
-    spark-client.service-account-registry add-config \
-        --username spark --namespace spark \
-        --conf spark.eventLog.enabled=true \
-        --conf spark.eventLog.dir=s3a://logs/spark-events/ \
-        --conf spark.history.fs.logDirectory=s3a://logs/spark-events/ \
-        --conf spark.hadoop.fs.s3a.aws.credentials.provider=org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider \
-        --conf spark.hadoop.fs.s3a.connection.ssl.enabled=false \
-        --conf spark.hadoop.fs.s3a.path.style.access=true \
-        --conf spark.hadoop.fs.s3a.access.key="$AWS_ACCESS_KEY" \
-        --conf spark.hadoop.fs.s3a.endpoint="$AWS_S3_ENDPOINT" \
-        --conf spark.hadoop.fs.s3a.secret.key="$AWS_SECRET_KEY" \
-        --conf spark.kubernetes.namespace=spark
-
-    spark-client.service-account-registry get-config \
-        --username spark --namespace spark
 }
 
 # Main execution
@@ -204,7 +137,6 @@ main() {
     install_additional_tools
     configure_spark
     deploy_minio
-    configure_spark_settings
 }
 
 main "$@"
