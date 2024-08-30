@@ -33,7 +33,10 @@ configure_spark_settings() {
         --conf spark.kubernetes.namespace=spark
 
     spark-client.service-account-registry get-config \
-        --username spark --namespace spark >properties.conf
+            --username spark --namespace spark
+
+    spark-client.service-account-registry get-config \
+        --username spark --namespace spark > properties.conf
 }
 
 create_s3_buckets() {
