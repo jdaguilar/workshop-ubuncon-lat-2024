@@ -10,7 +10,7 @@ import pyspark.sql.types as T
 JAR_PACKAGES = ("org.apache.iceberg:iceberg-spark-runtime-3.4_2.12:1.6.1",)
 
 CREATE_TABLE_QUERY = """
-CREATE TABLE IF NOT EXISTS iceberg_catalog.gh_archive (
+CREATE TABLE IF NOT EXISTS iceberg_catalog.db.gh_archive (
     event_id STRING,
     event_type STRING,
     created_at TIMESTAMP,
