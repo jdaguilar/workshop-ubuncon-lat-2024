@@ -7,7 +7,7 @@ import pyspark.sql.functions as F
 import pyspark.sql.types as T
 
 
-JAR_PACKAGES = ("iceberg-spark-runtime-3.5_2.12:1.6.0",)
+JAR_PACKAGES = ("org.apache.iceberg:iceberg-spark-runtime-3.4_2.12:1.6.1",)
 
 CREATE_TABLE_QUERY = """
 CREATE TABLE IF NOT EXISTS iceberg_catalog.gh_archive (
@@ -46,9 +46,12 @@ conf = (
         "spark.sql.extensions",
         "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions",
     )
+    .set("spark.sql.catalog.spark_catalog", "org.apache.iceberg.spark.SparkSessionCatalog")
+    .set("spark.sql.catalog.spark_catalog.type", "hive")
     .set("spark.sql.catalog.iceberg_catalog", "org.apache.iceberg.spark.SparkCatalog")
     .set("spark.sql.catalog.iceberg_catalog.type", "hadoop")
     .set("spark.sql.catalog.iceberg_catalog.warehouse", "s3a://curated/iceberg/")
+    .set("spark.sql.defaultCatalog", "iceberg_catalog")
 )
 
 ## Start Spark Session
@@ -117,5 +120,4 @@ if __name__ == "__main__":
 
     spark.sql(CREATE_TABLE_QUERY).show()
 
-    # main_df.writeTo("iceberg_catalog.gh_archive").option("mergeSchema","true").append()
-    main_df.writeTo("iceberg_catalog.gh_archive").option("mergeSchema","true").overwritePartitions()
+    main_df.writeTo("iceberg_catalog.db.gh_archive").option("mergeSchema","true").overwritePartitions()
