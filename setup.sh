@@ -133,7 +133,7 @@ deploy_minio_microk8s() {
 # Main execution
 main() {
     install_microk8s
-    configure_metallb
+    # configure_metallb
     install_additional_tools
     configure_spark
     deploy_minio_microk8s
